@@ -1,7 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"github.com/MarkusFank/rdfmap2go/internal/cli"
+)
 
 func main() {
-	fmt.Println("Hello, rdfmap2go!")
+	cli.Execute()
 }
