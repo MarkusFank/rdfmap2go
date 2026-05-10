@@ -32,7 +32,15 @@ func Run(mappingFiles []string, outputFile string) error {
 		return parseError
 	}
 
-	fmt.Printf("Successfully parsed %d mapping(s)", len(mappings))
+	fmt.Printf("Successfully parsed %d mapping(s)\n", len(mappings))
+
+	mapping := mapping.MergeMappings(mappings)
+
+	processingErr := Process(&mapping)
+
+	if processingErr != nil {
+		return processingErr
+	}
 
 	return nil
 }

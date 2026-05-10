@@ -1,19 +1,41 @@
 package mapping
 
 import (
+	"fmt"
+	"maps"
 	"os"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
 
-type Mapping struct {
-	Prefixes map[string]string        `yaml:"prefixes"`
-	Sources  map[string]SourceConfig  `yaml:"sources"`
-	Mappings map[string]MappingConfig `yaml:"mappings"`
+type rawMapping struct {
+	Prefixes map[string]string          `yaml:"prefixes"`
+	Sources  map[string]yaml.RawMessage `yaml:"sources"`
+	Mappings map[string]MappingConfig   `yaml:"mappings"`
 }
 
-type SourceConfig struct {
+type Mapping struct {
+	Prefixes map[string]string
+	Sources  map[string]SourceConfig
+	Mappings map[string]MappingConfig
+}
+
+type sourceConfigRawBase struct {
 	Type string `yaml:"type"`
+}
+
+type SourceConfig interface {
+	GetSourceType() string
+}
+
+type CsvSourceConfig struct {
+	Type string `yaml:"type"`
+	File string `yaml:"file"`
+}
+
+func (s CsvSourceConfig) GetSourceType() string {
+	return "csv"
 }
 
 type MappingConfig struct {
@@ -22,16 +44,51 @@ type MappingConfig struct {
 }
 
 func ReadMapping(mappingfile string) (Mapping, error) {
-	var m Mapping
+	m := Mapping{Sources: map[string]SourceConfig{}}
+	var rawMapping rawMapping
 
 	yamlBytes, fileErr := os.ReadFile(mappingfile)
 	if fileErr != nil {
 		return Mapping{}, fileErr
 	}
 
-	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
+	if err := yaml.Unmarshal(yamlBytes, &rawMapping); err != nil {
 		return Mapping{}, err
 	}
 
+	m.Prefixes = rawMapping.Prefixes
+	m.Mappings = rawMapping.Mappings
+
+	for sourceName, rawSource := range rawMapping.Sources {
+		var baseSource sourceConfigRawBase
+		if err := yaml.Unmarshal(rawSource, &baseSource); err != nil {
+			return Mapping{}, err
+		}
+
+		switch strings.ToLower(baseSource.Type) {
+		case "csv":
+			var csvSource CsvSourceConfig
+			if err := yaml.Unmarshal(rawSource, &csvSource); err != nil {
+				return Mapping{}, err
+			}
+
+			m.Sources[sourceName] = csvSource
+		default:
+			return Mapping{}, fmt.Errorf("Unable to parse source '%s'", sourceName)
+		}
+	}
+
 	return m, nil
+}
+
+func MergeMappings(mappings []Mapping) Mapping {
+	mergedMapping := Mapping{Prefixes: map[string]string{}, Sources: map[string]SourceConfig{}, Mappings: map[string]MappingConfig{}}
+
+	for _, m := range mappings {
+		maps.Copy(mergedMapping.Prefixes, m.Prefixes)
+		maps.Copy(mergedMapping.Sources, m.Sources)
+		maps.Copy(mergedMapping.Mappings, m.Mappings)
+	}
+
+	return mergedMapping
 }
