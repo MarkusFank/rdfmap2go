@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 )
 
 func Run(mappingFiles []string, outputFile string) error {
@@ -24,6 +26,14 @@ func Run(mappingFiles []string, outputFile string) error {
 
 	fmt.Println("Generating RDF file using " + allfiles.String())
 
+	mappings, parseError := parseMappings(mappingFiles)
+
+	if parseError != nil {
+		return parseError
+	}
+
+	fmt.Printf("Successfully parsed %d mapping(s)", len(mappings))
+
 	return nil
 }
 
@@ -33,4 +43,20 @@ func checkIfFileExists(file string) bool {
 	}
 
 	return true
+}
+
+func parseMappings(mappingFiles []string) ([]mapping.Mapping, error) {
+	var mappings []mapping.Mapping
+
+	for _, f := range mappingFiles {
+		m, err := mapping.ReadMapping(f)
+
+		if err != nil {
+			return nil, errors.Join(fmt.Errorf("Error while parsing mapping file '%s'", f), err)
+		}
+
+		mappings = append(mappings, m)
+	}
+
+	return mappings, nil
 }
