@@ -19,7 +19,7 @@ var generateCmd = &cobra.Command{
 
 func init() {
 	generateCmd.Flags().StringArrayVarP(&mappingFiles, "mapping", "m", []string{}, "Mapping file (YAML)")
-	generateCmd.Flags().StringVarP(&outputFile, "out", "o", "output.ttl", "Output file")
+	generateCmd.Flags().StringVarP(&outputFile, "out", "o", "output.nt", "Output file")
 
 	generateCmd.MarkFlagRequired("file")
 

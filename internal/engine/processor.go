@@ -8,9 +8,11 @@ import (
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/csv"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
+	"github.com/MarkusFank/rdfmap2go/internal/rdf"
+	"github.com/MarkusFank/rdfmap2go/internal/rdf/serialization"
 )
 
-func Process(mapping *mapping.Mapping) error {
+func Process(mapping *mapping.Mapping, outputFile string) error {
 
 	sourcesToMappings, err := mapSourcesToMappings(mapping)
 
@@ -18,23 +20,31 @@ func Process(mapping *mapping.Mapping) error {
 		return err
 	}
 
+	tripleStore := rdf.TripleStore{}
+
 	for source, mappings := range sourcesToMappings {
 		if len(mappings) == 0 {
 			fmt.Printf("Warning: Source '%s' is used in no mapping\n", source)
 			continue
 		}
 
-		err := processSource(source, &mappings, mapping)
+		err := processSource(source, &mappings, mapping, &tripleStore)
 
 		if err != nil {
 			return err
 		}
 	}
 
+	fmt.Printf("Created %d triples\n", len(tripleStore.Triples))
+
+	serializer := serialization.NTripleSerializer{} // TODO let serializer type be set from options
+
+	serializer.Serialize(&tripleStore, outputFile)
+
 	return nil
 }
 
-func processSource(sourceName string, mappingsForSource *[]string, mainMapping *mapping.Mapping) error {
+func processSource(sourceName string, mappingsForSource *[]string, mainMapping *mapping.Mapping, tripleStore *rdf.TripleStore) error {
 
 	sourceConfig := mainMapping.Sources[sourceName]
 
@@ -64,7 +74,7 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 		}
 
 		for _, mapping := range mappings {
-			processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes)
+			processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes, tripleStore)
 		}
 
 	}
@@ -72,7 +82,7 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 	return nil
 }
 
-func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string) {
+func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string, tripleStore *rdf.TripleStore) {
 
 	subject := expandPrefix(expandDataColumns(mapping.Subject, dataRow), prefixes)
 	fmt.Printf("The subject is: %s\n", subject)
@@ -86,10 +96,34 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 			object := expandPrefix(expandDataColumns(objectConf, dataRow), prefixes)
 
 			fmt.Printf("\tpredicate %s; object: %s\n", predicate, object)
+
+			fillToTripleStore(subject, predicate, object, tripleStore)
+
 		} else {
 			fmt.Printf("Warning: Unable to process triple %v\n", tripleConfig)
 		}
 	}
+}
+
+func fillToTripleStore(subject, predicate, object string, tripleStore *rdf.TripleStore) {
+	subjectNode := createNodeForValue(subject)
+	predicateNode := createNodeForValue(predicate)
+	objectNode := createNodeForValue(object)
+
+	tripleStore.AddTriple(subjectNode, predicateNode, objectNode)
+}
+
+func createNodeForValue(value string) rdf.Node {
+	node := rdf.Node{}
+	if strings.HasPrefix(value, "http://") {
+		node.Type = rdf.URI
+	} else {
+		node.Type = rdf.Literal
+	}
+
+	node.Value = value
+
+	return node
 }
 
 func expandDataColumns(templateString string, dataRow datareader.DataRow) string {

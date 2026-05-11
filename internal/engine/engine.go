@@ -34,9 +34,11 @@ func Run(mappingFiles []string, outputFile string) error {
 
 	fmt.Printf("Successfully parsed %d mapping(s)\n", len(mappings))
 
+	// TODO do a mapping validation after the mappings are parsed and before actual processing begins
+
 	mapping := mapping.MergeMappings(mappings)
 
-	processingErr := Process(&mapping)
+	processingErr := Process(&mapping, outputFile)
 
 	if processingErr != nil {
 		return processingErr
