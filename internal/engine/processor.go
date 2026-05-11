@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/csv"
@@ -63,7 +64,7 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 		}
 
 		for _, mapping := range mappings {
-			processDataRowWithMapping(*row, &mapping)
+			processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes)
 		}
 
 	}
@@ -71,16 +72,45 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 	return nil
 }
 
-func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig) {
-	re := regexp.MustCompile(`\$\{([a-zA-Z0-9_]+)\}`)
+func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string) {
 
-	result := re.ReplaceAllStringFunc(mapping.Subject, func(m string) string {
-		sub := re.FindStringSubmatch(m)
+	subject := expandPrefix(expandDataColumns(mapping.Subject, dataRow), prefixes)
+	fmt.Printf("The subject is: %s\n", subject)
+
+	for _, tripleConfig := range mapping.Triples {
+		if len(tripleConfig) == 2 {
+			predicateConf := tripleConfig[0]
+			objectConf := tripleConfig[1]
+
+			predicate := expandPrefix(expandDataColumns(predicateConf, dataRow), prefixes)
+			object := expandPrefix(expandDataColumns(objectConf, dataRow), prefixes)
+
+			fmt.Printf("\tpredicate %s; object: %s\n", predicate, object)
+		} else {
+			fmt.Printf("Warning: Unable to process triple %v\n", tripleConfig)
+		}
+	}
+}
+
+func expandDataColumns(templateString string, dataRow datareader.DataRow) string {
+	valRegex := regexp.MustCompile(`\$\{([a-zA-Z0-9_]+)\}`)
+	result := valRegex.ReplaceAllStringFunc(templateString, func(m string) string {
+		sub := valRegex.FindStringSubmatch(m)
 		val := dataRow[sub[1]].(string) // TODO handle other types than string
 		return val
 	})
+	return result
+}
 
-	fmt.Printf("The subject is: %s\n", result)
+func expandPrefix(value string, prefixes map[string]string) string {
+	for prefix, replacement := range prefixes {
+		prefixWithColon := prefix + ":"
+		if after, ok := strings.CutPrefix(value, prefixWithColon); ok {
+			return replacement + after
+		}
+	}
+
+	return value
 }
 
 func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceConfig) (datareader.DataReader, error) {

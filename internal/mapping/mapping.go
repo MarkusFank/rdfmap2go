@@ -39,8 +39,9 @@ func (s CsvSourceConfig) GetSourceType() string {
 }
 
 type MappingConfig struct {
-	Source  string `yaml:"source"`
-	Subject string `yaml:"subject"`
+	Source  string     `yaml:"source"`
+	Subject string     `yaml:"subject"`
+	Triples [][]string `yaml:"triples"`
 }
 
 func ReadMapping(mappingfile string) (Mapping, error) {
