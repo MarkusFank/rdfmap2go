@@ -7,6 +7,7 @@ import (
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/csv"
+	"github.com/MarkusFank/rdfmap2go/internal/datareader/sqlite"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	"github.com/MarkusFank/rdfmap2go/internal/rdf"
 	"github.com/MarkusFank/rdfmap2go/internal/rdf/serialization"
@@ -84,7 +85,13 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 
 func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string, tripleStore *rdf.TripleStore) {
 
-	subject := expandPrefix(expandDataColumns(mapping.Subject, dataRow), prefixes)
+	expanedSubject, allValuesExpanded := expandDataColumns(mapping.Subject, dataRow)
+
+	if !allValuesExpanded {
+		return
+	}
+
+	subject := expandPrefix(expanedSubject, prefixes)
 	fmt.Printf("The subject is: %s\n", subject)
 
 	for _, tripleConfig := range mapping.Triples {
@@ -92,10 +99,14 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 			predicateConf := tripleConfig[0]
 			objectConf := tripleConfig[1]
 
-			predicate := expandPrefix(expandDataColumns(predicateConf, dataRow), prefixes)
-			object := expandPrefix(expandDataColumns(objectConf, dataRow), prefixes)
+			expandedPredicate, _ := expandDataColumns(predicateConf, dataRow)
+			predicate := expandPrefix(expandedPredicate, prefixes)
+			expandedObject, _ := expandDataColumns(objectConf, dataRow)
+			object := expandPrefix(expandedObject, prefixes)
 
-			fmt.Printf("\tpredicate %s; object: %s\n", predicate, object)
+			if len(strings.TrimSpace(object)) == 0 {
+				continue // if the object has no value, do not add the triple
+			}
 
 			fillToTripleStore(subject, predicate, object, tripleStore)
 
@@ -126,14 +137,36 @@ func createNodeForValue(value string) rdf.Node {
 	return node
 }
 
-func expandDataColumns(templateString string, dataRow datareader.DataRow) string {
+func expandDataColumns(templateString string, dataRow datareader.DataRow) (string, bool) {
 	valRegex := regexp.MustCompile(`\$\{([a-zA-Z0-9_]+)\}`)
+	allValuesExpanded := true
 	result := valRegex.ReplaceAllStringFunc(templateString, func(m string) string {
 		sub := valRegex.FindStringSubmatch(m)
-		val := dataRow[sub[1]].(string) // TODO handle other types than string
-		return val
+
+		val := dataRow[sub[1]]
+
+		// TODO handle other types
+		switch typedVal := val.(type) {
+		case string:
+			if len(strings.TrimSpace(typedVal)) == 0 {
+				allValuesExpanded = false
+			}
+			return typedVal
+		case int64:
+			return fmt.Sprint(typedVal)
+		case int32:
+			return string(typedVal)
+		case bool:
+			if typedVal {
+				return "true"
+			}
+			return "false"
+		}
+
+		allValuesExpanded = false
+		return ""
 	})
-	return result
+	return result, allValuesExpanded
 }
 
 func expandPrefix(value string, prefixes map[string]string) string {
@@ -153,9 +186,23 @@ func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceCon
 	case "csv":
 		csvSourceConfig := sourceConfig.(mapping.CsvSourceConfig)
 		csvReader := csv.CsvDataReader{}
-		csvReader.Init(csvSourceConfig.File)
+		err := csvReader.Init(csvSourceConfig.File)
+
+		if err != nil {
+			return nil, err
+		}
 
 		return &csvReader, nil
+	case "sqlite":
+		sqliteSourceConfig := sourceConfig.(mapping.SqliteSourceConfig)
+		sqliteReader := sqlite.SqliteDataReader{}
+		err := sqliteReader.Init(sqliteSourceConfig.File, sqliteSourceConfig.Query)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &sqliteReader, nil
 	}
 
 	return nil, fmt.Errorf("Unable to create data reader for source '%s'", sourceName)

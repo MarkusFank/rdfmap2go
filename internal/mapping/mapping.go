@@ -38,6 +38,16 @@ func (s CsvSourceConfig) GetSourceType() string {
 	return "csv"
 }
 
+type SqliteSourceConfig struct {
+	Type  string `yaml:"type"`
+	File  string `yaml:"file"`
+	Query string `yaml:"query"`
+}
+
+func (s SqliteSourceConfig) GetSourceType() string {
+	return "sqlite"
+}
+
 type MappingConfig struct {
 	Source  string     `yaml:"source"`
 	Subject string     `yaml:"subject"`
@@ -74,6 +84,13 @@ func ReadMapping(mappingfile string) (Mapping, error) {
 			}
 
 			m.Sources[sourceName] = csvSource
+		case "sqlite":
+			var sqliteSource SqliteSourceConfig
+			if err := yaml.Unmarshal(rawSource, &sqliteSource); err != nil {
+				return Mapping{}, err
+			}
+
+			m.Sources[sourceName] = sqliteSource
 		default:
 			return Mapping{}, fmt.Errorf("Unable to parse source '%s'", sourceName)
 		}
