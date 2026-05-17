@@ -48,6 +48,15 @@ func (s SqliteSourceConfig) GetSourceType() string {
 	return "sqlite"
 }
 
+type JsonSourceConfig struct {
+	Type string `yaml:"type"`
+	File string `yaml:"file"`
+}
+
+func (s JsonSourceConfig) GetSourceType() string {
+	return "json"
+}
+
 type MappingConfig struct {
 	Source  string     `yaml:"source"`
 	Subject string     `yaml:"subject"`
@@ -91,6 +100,13 @@ func ReadMapping(mappingfile string) (Mapping, error) {
 			}
 
 			m.Sources[sourceName] = sqliteSource
+		case "json":
+			var jsonSource JsonSourceConfig
+			if err := yaml.Unmarshal(rawSource, &jsonSource); err != nil {
+				return Mapping{}, err
+			}
+
+			m.Sources[sourceName] = jsonSource
 		default:
 			return Mapping{}, fmt.Errorf("Unable to parse source '%s'", sourceName)
 		}

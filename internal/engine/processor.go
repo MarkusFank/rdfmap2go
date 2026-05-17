@@ -7,6 +7,7 @@ import (
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/csv"
+	"github.com/MarkusFank/rdfmap2go/internal/datareader/json"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/sqlite"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	"github.com/MarkusFank/rdfmap2go/internal/rdf"
@@ -203,6 +204,17 @@ func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceCon
 		}
 
 		return &sqliteReader, nil
+
+	case "json":
+		jsonSourceConfig := sourceConfig.(mapping.JsonSourceConfig)
+		jsonReader := json.JsonDataReader{}
+		err := jsonReader.Init(jsonSourceConfig.File)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &jsonReader, nil
 	}
 
 	return nil, fmt.Errorf("Unable to create data reader for source '%s'", sourceName)
