@@ -49,8 +49,9 @@ func (s SqliteSourceConfig) GetSourceType() string {
 }
 
 type JsonSourceConfig struct {
-	Type string `yaml:"type"`
-	File string `yaml:"file"`
+	Type     string `yaml:"type"`
+	File     string `yaml:"file"`
+	JsonPath string `yaml:"jsonPath"`
 }
 
 func (s JsonSourceConfig) GetSourceType() string {

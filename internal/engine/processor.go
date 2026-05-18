@@ -208,7 +208,7 @@ func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceCon
 	case "json":
 		jsonSourceConfig := sourceConfig.(mapping.JsonSourceConfig)
 		jsonReader := json.JsonDataReader{}
-		err := jsonReader.Init(jsonSourceConfig.File)
+		err := jsonReader.Init(jsonSourceConfig.File, jsonSourceConfig.JsonPath)
 
 		if err != nil {
 			return nil, err
