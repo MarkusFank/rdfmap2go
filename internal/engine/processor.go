@@ -53,10 +53,8 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 	reader, err := createDataReaderForSource(sourceName, sourceConfig)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to create data reader for source '%s': %w", sourceName, err)
 	}
-
-	defer reader.Close()
 
 	mappings := []mapping.MappingConfig{}
 
@@ -64,21 +62,20 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 		mappings = append(mappings, mainMapping.Mappings[m])
 	}
 
-	for {
-		row, err := reader.ReadRow()
+	readerChan, err := reader.Read()
 
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
+	}
 
-		if row == nil {
-			break
+	for row := range readerChan {
+		if row.Error != nil {
+			return row.Error
 		}
 
 		for _, mapping := range mappings {
-			processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes, tripleStore)
+			processDataRowWithMapping(row.Row, &mapping, mainMapping.Prefixes, tripleStore)
 		}
-
 	}
 
 	return nil
@@ -93,7 +90,6 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 	}
 
 	subject := expandPrefix(expanedSubject, prefixes)
-	fmt.Printf("The subject is: %s\n", subject)
 
 	for _, tripleConfig := range mapping.Triples {
 		if len(tripleConfig) == 2 {
@@ -183,41 +179,28 @@ func expandPrefix(value string, prefixes map[string]string) string {
 
 func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceConfig) (datareader.DataReader, error) {
 
+	var dataReader datareader.DataReader
+
 	switch sourceConfig.GetSourceType() {
 	case "csv":
-		csvSourceConfig := sourceConfig.(mapping.CsvSourceConfig)
-		csvReader := csv.CsvDataReader{}
-		err := csvReader.Init(csvSourceConfig.File)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return &csvReader, nil
+		dataReader = &csv.CsvDataReader{}
 	case "sqlite":
-		sqliteSourceConfig := sourceConfig.(mapping.SqliteSourceConfig)
-		sqliteReader := sqlite.SqliteDataReader{}
-		err := sqliteReader.Init(sqliteSourceConfig.File, sqliteSourceConfig.Query)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return &sqliteReader, nil
-
+		dataReader = &sqlite.SqliteDataReader{}
 	case "json":
-		jsonSourceConfig := sourceConfig.(mapping.JsonSourceConfig)
-		jsonReader := json.JsonDataReader{}
-		err := jsonReader.Init(jsonSourceConfig.File, jsonSourceConfig.JsonPath)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return &jsonReader, nil
+		dataReader = &json.JsonDataReader{}
 	}
 
-	return nil, fmt.Errorf("Unable to create data reader for source '%s'", sourceName)
+	if dataReader == nil {
+		return nil, fmt.Errorf("Unable to create data reader for source '%s'", sourceName)
+	}
+
+	err := dataReader.Init(sourceConfig)
+
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create data reader for source '%s': %w", sourceName, err)
+	}
+
+	return dataReader, nil
 }
 
 func mapSourcesToMappings(mapping *mapping.Mapping) (map[string][]string, error) {

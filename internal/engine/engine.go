@@ -62,7 +62,7 @@ func parseMappings(mappingFiles []string) ([]mapping.Mapping, error) {
 		m, err := mapping.ReadMapping(f)
 
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("Error while parsing mapping file '%s'", f), err)
+			return nil, fmt.Errorf("Error while parsing mapping file '%s': %w", f, err)
 		}
 
 		mappings = append(mappings, m)
