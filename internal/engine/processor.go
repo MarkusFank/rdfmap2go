@@ -185,9 +185,8 @@ func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceCon
 
 	switch sourceConfig.GetSourceType() {
 	case "csv":
-		csvSourceConfig := sourceConfig.(mapping.CsvSourceConfig)
 		csvReader := csv.CsvDataReader{}
-		err := csvReader.Init(csvSourceConfig.File)
+		err := csvReader.Init(sourceConfig)
 
 		if err != nil {
 			return nil, err
@@ -195,9 +194,8 @@ func createDataReaderForSource(sourceName string, sourceConfig mapping.SourceCon
 
 		return &csvReader, nil
 	case "sqlite":
-		sqliteSourceConfig := sourceConfig.(mapping.SqliteSourceConfig)
 		sqliteReader := sqlite.SqliteDataReader{}
-		err := sqliteReader.Init(sqliteSourceConfig.File, sqliteSourceConfig.Query)
+		err := sqliteReader.Init(sourceConfig)
 
 		if err != nil {
 			return nil, err

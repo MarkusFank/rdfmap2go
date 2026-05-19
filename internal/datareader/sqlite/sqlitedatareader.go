@@ -2,94 +2,152 @@ package sqlite
 
 import (
 	"database/sql"
+	"errors"
+	"os"
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
+	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	_ "modernc.org/sqlite"
 )
 
 type SqliteDataReader struct {
-	sqliteFile    string
+	// sqliteFile    string
 	isInitialized bool
-	db            *sql.DB
-	sqlRows       *sql.Rows
-	columns       *[]string
-	columnTypes   []*sql.ColumnType
+	sourceConfig  *mapping.SqliteSourceConfig
+	// db            *sql.DB
+	// sqlRows       *sql.Rows
+	// columns       *[]string
+	// columnTypes   []*sql.ColumnType
 }
 
-func (reader *SqliteDataReader) Init(file string, query string) error {
+func (reader *SqliteDataReader) Init(sourceConfig mapping.SourceConfig) error {
+	sqliteSourceConfig, isSqliteSourceConfig := sourceConfig.(mapping.SqliteSourceConfig)
 
-	db, err := sql.Open("sqlite", file)
+	if !isSqliteSourceConfig {
+		return errors.New("Specified source cofing is not valid")
+	}
+
+	_, err := os.Stat(sqliteSourceConfig.File) // check if file exists
 
 	if err != nil {
 		return err
 	}
 
-	reader.db = db
+	reader.sourceConfig = &sqliteSourceConfig
 
-	rows, err := db.Query(query)
+	// db, err := sql.Open("sqlite", file)
 
-	if err != nil {
-		return nil
-	}
+	// if err != nil {
+	// 	return err
+	// }
 
-	reader.sqlRows = rows
+	// reader.db = db
 
-	columns, err := reader.sqlRows.Columns()
+	// rows, err := db.Query(query)
 
-	if err != nil {
-		return err
-	}
+	// if err != nil {
+	// 	return nil
+	// }
 
-	columnTypes, err := reader.sqlRows.ColumnTypes()
+	// reader.sqlRows = rows
 
-	if err != nil {
-		return err
-	}
+	// columns, err := reader.sqlRows.Columns()
 
-	reader.columns = &columns
-	reader.columnTypes = columnTypes
+	// if err != nil {
+	// 	return err
+	// }
+
+	// columnTypes, err := reader.sqlRows.ColumnTypes()
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// reader.columns = &columns
+	// reader.columnTypes = columnTypes
+
+	reader.isInitialized = true
 
 	return nil
 }
 
-func (reader *SqliteDataReader) ReadRow() (*datareader.DataRow, error) {
-	hasRow := reader.sqlRows.Next()
-
-	if !hasRow {
-		return nil, nil
+func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
+	if !reader.isInitialized {
+		return nil, errors.New("SqliteDataReader has to be initialized before it can be used!")
 	}
 
-	values := make([]any, len(*reader.columns))
-	valuePtrs := make([]any, len(*reader.columns))
+	db, err := sql.Open("sqlite", reader.sourceConfig.File)
 
-	for i := range values {
-		valuePtrs[i] = &values[i]
-	}
-
-	if err := reader.sqlRows.Scan(valuePtrs...); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
-	dataRow := datareader.DataRow{}
-	for i, col := range *reader.columns {
-		val := values[i]
+	defer db.Close()
 
-		// TODO better type checking (via "columnTypes")
-		if s, isString := val.(string); isString {
-			dataRow[col] = s
-		} else {
-			if intVal, isInt := val.(int64); isInt {
-				dataRow[col] = intVal
-			}
+	rows, err := db.Query(reader.sourceConfig.Query)
 
-			// TODO handler other types
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	return &dataRow, nil
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// columnTypes, err := rows.ColumnTypes()
+
+	if err != nil {
+		return nil, err
+	}
+
+	channel := make(chan datareader.RowResult)
+
+	go func() {
+		for {
+			hasRow := rows.Next()
+
+			if !hasRow {
+				close(channel)
+				return
+			}
+
+			values := make([]any, len(columns))
+			valuePtrs := make([]any, len(columns))
+
+			for i := range values {
+				valuePtrs[i] = &values[i]
+			}
+
+			if err := rows.Scan(valuePtrs...); err != nil {
+				channel <- datareader.RowResult{Error: err}
+			}
+
+			dataRow := datareader.DataRow{}
+			for i, col := range columns {
+				val := values[i]
+
+				// TODO better type checking (via "columnTypes")
+				if s, isString := val.(string); isString {
+					dataRow[col] = s
+				} else {
+					if intVal, isInt := val.(int64); isInt {
+						dataRow[col] = intVal
+					}
+
+					// TODO handler other types
+				}
+			}
+
+			channel <- datareader.RowResult{Row: dataRow}
+		}
+	}()
+
+	return channel, nil
 }
 
 func (reader *SqliteDataReader) Close() {
-	reader.sqlRows.Close()
-	reader.db.Close()
 }
