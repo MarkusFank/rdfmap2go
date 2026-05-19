@@ -1,8 +1,14 @@
 package datareader
 
+import "github.com/MarkusFank/rdfmap2go/internal/mapping"
+
 type DataReader interface {
-	ReadRow() (*DataRow, error)
-	Close()
+	Init(sourceConfig mapping.SourceConfig) error
+	Read() (<-chan RowResult, error)
 }
 
+type RowResult struct {
+	Row   DataRow
+	Error error
+}
 type DataRow map[string]any
