@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -53,7 +54,7 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 	reader, err := createDataReaderForSource(sourceName, sourceConfig)
 
 	if err != nil {
-		return err
+		return errors.Join(fmt.Errorf("Unable to create data reader for source '%s'", sourceName), err)
 	}
 
 	defer reader.Close()
@@ -64,22 +65,38 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 		mappings = append(mappings, mainMapping.Mappings[m])
 	}
 
-	for {
-		row, err := reader.ReadRow()
+	readerChan, err := reader.Read()
 
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
+	}
 
-		if row == nil {
-			break
+	for row := range readerChan {
+		if row.Error != nil {
+			return row.Error
 		}
 
 		for _, mapping := range mappings {
-			processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes, tripleStore)
+			processDataRowWithMapping(row.Row, &mapping, mainMapping.Prefixes, tripleStore)
 		}
-
 	}
+
+	// for {
+	// 	row, err := reader.ReadRow()
+
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	if row == nil {
+	// 		break
+	// 	}
+
+	// 	for _, mapping := range mappings {
+	// 		processDataRowWithMapping(*row, &mapping, mainMapping.Prefixes, tripleStore)
+	// 	}
+
+	// }
 
 	return nil
 }
