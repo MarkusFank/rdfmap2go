@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
+	"github.com/MarkusFank/rdfmap2go/internal/download"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	_ "modernc.org/sqlite"
 )
@@ -13,6 +15,7 @@ import (
 type SqliteDataReader struct {
 	isInitialized bool
 	sourceConfig  *mapping.SqliteSourceConfig
+	isRemoteFile  bool
 }
 
 func (reader *SqliteDataReader) Init(sourceConfig mapping.SourceConfig) error {
@@ -22,10 +25,13 @@ func (reader *SqliteDataReader) Init(sourceConfig mapping.SourceConfig) error {
 		return errors.New("Specified source config is not valid")
 	}
 
-	_, err := os.Stat(sqliteSourceConfig.File) // check if file exists
-
-	if err != nil {
-		return err
+	if strings.HasPrefix(sqliteSourceConfig.File, "https://") || strings.HasPrefix(sqliteSourceConfig.File, "http://") {
+		reader.isRemoteFile = true
+	} else {
+		_, err := os.Stat(sqliteSourceConfig.File) // check if file exists
+		if err != nil {
+			return err
+		}
 	}
 
 	reader.sourceConfig = &sqliteSourceConfig
@@ -40,7 +46,37 @@ func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
 		return nil, errors.New("SqliteDataReader has to be initialized before it can be used!")
 	}
 
-	db, err := sql.Open("sqlite", reader.sourceConfig.File)
+	var fileName string
+	var deleteTempFileInOuterFunction bool
+
+	if !reader.isRemoteFile {
+		fileName = reader.sourceConfig.File
+	} else {
+		tempFile, err := os.CreateTemp(os.TempDir(), "rdf2go-temp-*.sqlite")
+
+		if err != nil {
+			return nil, err
+		}
+
+		deleteTempFileInOuterFunction = true
+
+		defer func() {
+			if deleteTempFileInOuterFunction {
+				os.Remove(tempFile.Name())
+			}
+		}()
+
+		err = download.DownloadFile(reader.sourceConfig.File, tempFile)
+		tempFile.Close()
+
+		if err != nil {
+			return nil, err
+		}
+
+		fileName = tempFile.Name()
+	}
+
+	db, err := sql.Open("sqlite", fileName)
 
 	if err != nil {
 		return nil, err
@@ -58,6 +94,10 @@ func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
 		return nil, err
 	}
 
+	// TODO db.Close() and rows.Close() are never called if we return early due to an error
+
+	deleteTempFileInOuterFunction = false
+
 	// columnTypes, err := rows.ColumnTypes()
 
 	// if err != nil {
@@ -69,6 +109,12 @@ func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
 	go func() {
 		defer db.Close()
 		defer rows.Close()
+		defer func(isTempFile bool, file string) {
+			if isTempFile {
+				os.Remove(file)
+			}
+		}(reader.isRemoteFile, fileName)
+
 		for {
 			hasRow := rows.Next()
 
