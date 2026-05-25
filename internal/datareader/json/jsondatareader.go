@@ -1,6 +1,7 @@
 package json
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"maps"
@@ -8,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/MarkusFank/rdfmap2go/internal/datareader"
+	"github.com/MarkusFank/rdfmap2go/internal/download"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	"github.com/tidwall/gjson"
 )
 
 type JsonDataReader struct {
 	sourceConfig  *mapping.JsonSourceConfig
+	isRemoteFile  bool
 	isInitialized bool
 }
 
@@ -24,10 +27,14 @@ func (reader *JsonDataReader) Init(sourceConfig mapping.SourceConfig) error {
 		return errors.New("Specified source config is not valid")
 	}
 
-	_, err := os.Stat(jsonSourceConfig.File) // check if file exists
+	if strings.HasPrefix(jsonSourceConfig.File, "https://") || strings.HasPrefix(jsonSourceConfig.File, "http://") {
+		reader.isRemoteFile = true
+	} else {
+		_, err := os.Stat(jsonSourceConfig.File) // check if file exists
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	reader.sourceConfig = &jsonSourceConfig
@@ -43,7 +50,30 @@ func (reader *JsonDataReader) Read() (<-chan datareader.RowResult, error) {
 		return nil, errors.New("JsonDataReader has to be initialized before it can be used!")
 	}
 
-	bytes, err := os.ReadFile(reader.sourceConfig.File) // TODO do not read entire file content at once
+	var bytesArr []byte
+	var err error
+
+	if !reader.isRemoteFile {
+		bytesArr, err = os.ReadFile(reader.sourceConfig.File) // TODO do not read entire file content at once
+	} else {
+		tempFile, err := os.CreateTemp(os.TempDir(), "rdf2go-temp-*.json")
+
+		if err != nil {
+			return nil, err
+		}
+
+		defer tempFile.Close()
+		defer os.Remove(tempFile.Name())
+
+		writer := bytes.Buffer{}
+		err = download.DownloadFile(reader.sourceConfig.File, &writer)
+
+		if err != nil {
+			return nil, err
+		}
+
+		bytesArr = writer.Bytes()
+	}
 
 	if err != nil {
 		return nil, err
@@ -53,9 +83,9 @@ func (reader *JsonDataReader) Read() (<-chan datareader.RowResult, error) {
 
 	jsonPath := reader.sourceConfig.JsonPath
 	if len(strings.TrimSpace(jsonPath)) == 0 {
-		res = gjson.ParseBytes(bytes)
+		res = gjson.ParseBytes(bytesArr)
 	} else {
-		res = gjson.GetBytes(bytes, jsonPath)
+		res = gjson.GetBytes(bytesArr, jsonPath)
 	}
 
 	channel := make(chan datareader.RowResult)
