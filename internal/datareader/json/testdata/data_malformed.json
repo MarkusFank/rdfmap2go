@@ -1,0 +1,7 @@
+[
+    "this is an invalid array entry",
+    {
+        "manufacturer": "Volkswagen",
+        "modelName": "Golf"
+    }
+]

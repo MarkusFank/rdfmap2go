@@ -88,6 +88,10 @@ func (reader *JsonDataReader) Read() (<-chan datareader.RowResult, error) {
 		res = gjson.GetBytes(bytesArr, jsonPath)
 	}
 
+	if res.Type == gjson.Null {
+		return nil, errors.New("JSON file is invalid or empty!")
+	}
+
 	channel := make(chan datareader.RowResult)
 
 	go func() {
