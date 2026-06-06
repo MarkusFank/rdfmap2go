@@ -100,6 +100,7 @@ func (r *CsvDataReader) Read() (<-chan datareader.RowResult, error) {
 	channel := make(chan datareader.RowResult)
 
 	go func() {
+		defer close(channel)
 		defer f.Close()
 
 		defer func(isTempFile bool, file string) {
@@ -112,17 +113,20 @@ func (r *CsvDataReader) Read() (<-chan datareader.RowResult, error) {
 			record, err := csvReader.Read()
 
 			if err == io.EOF {
-				close(channel)
 				return
 			}
 
 			if err != nil {
-				close(channel)
 				channel <- datareader.RowResult{Error: err}
+				return
 			}
 
 			row := datareader.DataRow{}
 			for i, header := range headers {
+				if i >= len(record) {
+					break
+				}
+
 				row[header] = record[i]
 			}
 
