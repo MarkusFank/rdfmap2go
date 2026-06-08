@@ -107,6 +107,7 @@ func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
 	channel := make(chan datareader.RowResult)
 
 	go func() {
+		defer close(channel)
 		defer db.Close()
 		defer rows.Close()
 		defer func(isTempFile bool, file string) {
@@ -119,7 +120,6 @@ func (reader *SqliteDataReader) Read() (<-chan datareader.RowResult, error) {
 			hasRow := rows.Next()
 
 			if !hasRow {
-				close(channel)
 				return
 			}
 

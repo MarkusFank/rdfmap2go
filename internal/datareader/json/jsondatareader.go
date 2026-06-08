@@ -95,6 +95,7 @@ func (reader *JsonDataReader) Read() (<-chan datareader.RowResult, error) {
 	channel := make(chan datareader.RowResult)
 
 	go func() {
+		defer close(channel)
 		currentRow := 0
 		res.ForEach(func(key, val gjson.Result) bool {
 			row := val.Value()
@@ -117,7 +118,6 @@ func (reader *JsonDataReader) Read() (<-chan datareader.RowResult, error) {
 			return true
 		})
 
-		close(channel)
 	}()
 
 	return channel, nil
