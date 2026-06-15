@@ -9,6 +9,7 @@ import (
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/csv"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/json"
 	"github.com/MarkusFank/rdfmap2go/internal/datareader/sqlite"
+	"github.com/MarkusFank/rdfmap2go/internal/engine/functionevaluation"
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 	"github.com/MarkusFank/rdfmap2go/internal/rdf"
 	"github.com/MarkusFank/rdfmap2go/internal/rdf/serialization"
@@ -23,6 +24,8 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 	}
 
 	tripleStore := rdf.TripleStore{}
+	functionEvaluator := functionevaluation.FunctionEvaluator{}
+	functionEvaluator.Init(mapping.Functions)
 
 	for source, mappings := range sourcesToMappings {
 		if len(mappings) == 0 {
@@ -30,7 +33,7 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 			continue
 		}
 
-		err := processSource(source, &mappings, mapping, &tripleStore)
+		err := processSource(source, &mappings, mapping, &functionEvaluator, &tripleStore)
 
 		if err != nil {
 			return err
@@ -46,7 +49,7 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 	return nil
 }
 
-func processSource(sourceName string, mappingsForSource *[]string, mainMapping *mapping.Mapping, tripleStore *rdf.TripleStore) error {
+func processSource(sourceName string, mappingsForSource *[]string, mainMapping *mapping.Mapping, functionEvaluator *functionevaluation.FunctionEvaluator, tripleStore *rdf.TripleStore) error {
 
 	sourceConfig := mainMapping.Sources[sourceName]
 
@@ -74,30 +77,35 @@ func processSource(sourceName string, mappingsForSource *[]string, mainMapping *
 		}
 
 		for _, mapping := range mappings {
-			processDataRowWithMapping(row.Row, &mapping, mainMapping.Prefixes, tripleStore)
+			err := processDataRowWithMapping(row.Row, &mapping, mainMapping.Prefixes, functionEvaluator, tripleStore)
+
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string, tripleStore *rdf.TripleStore) {
+func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.MappingConfig, prefixes map[string]string, functionEvaluator *functionevaluation.FunctionEvaluator, tripleStore *rdf.TripleStore) error {
 
 	expanedSubject, allValuesExpanded := expandDataColumns(mapping.Subject, dataRow)
 
 	if !allValuesExpanded {
-		return
+		return nil
 	}
 
 	subject := expandPrefix(expanedSubject, prefixes)
 
 	for _, tripleConfig := range mapping.Triples {
-		if len(tripleConfig) == 2 {
-			predicateConf := tripleConfig[0]
-			objectConf := tripleConfig[1]
+		predicateConf := tripleConfig.Predicate
+		expandedPredicate, _ := expandDataColumns(predicateConf, dataRow)
+		predicate := expandPrefix(expandedPredicate, prefixes)
 
-			expandedPredicate, _ := expandDataColumns(predicateConf, dataRow)
-			predicate := expandPrefix(expandedPredicate, prefixes)
+		if len(strings.TrimSpace(tripleConfig.FunctionName)) == 0 {
+			objectConf := tripleConfig.Object
+
 			expandedObject, _ := expandDataColumns(objectConf, dataRow)
 			object := expandPrefix(expandedObject, prefixes)
 
@@ -108,9 +116,34 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 			fillToTripleStore(subject, predicate, object, tripleStore)
 
 		} else {
-			fmt.Printf("Warning: Unable to process triple %v\n", tripleConfig)
+			expandedParams := map[string]any{}
+
+			for paramName, funcParam := range tripleConfig.FunctionParams {
+				switch typedFuncParam := funcParam.(type) {
+				case string:
+					expandedParam, _ := expandDataColumns(typedFuncParam, dataRow)
+					expandedParams[paramName] = expandedParam
+				default:
+					expandedParams[paramName] = typedFuncParam
+				}
+
+			}
+
+			object, err := functionEvaluator.EvaluateFunction(tripleConfig.FunctionName, expandedParams)
+
+			if err != nil {
+				return err
+			}
+
+			if len(strings.TrimSpace(object)) == 0 {
+				continue // if the object has no value, do not add the triple
+			}
+
+			fillToTripleStore(subject, predicate, object, tripleStore)
 		}
 	}
+
+	return nil
 }
 
 func fillToTripleStore(subject, predicate, object string, tripleStore *rdf.TripleStore) {
