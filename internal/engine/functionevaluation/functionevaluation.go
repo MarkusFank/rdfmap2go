@@ -1,6 +1,7 @@
 package functionevaluation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -10,6 +11,7 @@ type functions = map[string]func(fnParams map[string]any) (string, error)
 type FunctionEvaluator struct {
 	functionMapping         map[string]string
 	namespacesWithFunctions map[string]functions
+	isInitialized           bool
 }
 
 func (evaluator *FunctionEvaluator) Init(functionMapping map[string]string) {
@@ -21,9 +23,15 @@ func (evaluator *FunctionEvaluator) Init(functionMapping map[string]string) {
 	evaluator.namespacesWithFunctions["rdfmap2go.strings"]["lower"] = lower
 	evaluator.namespacesWithFunctions["rdfmap2go.strings"]["upper"] = upper
 	evaluator.namespacesWithFunctions["rdfmap2go.strings"]["substr"] = substr
+
+	evaluator.isInitialized = true
 }
 
 func (evaluator *FunctionEvaluator) EvaluateFunction(functionName string, params map[string]any) (string, error) {
+	if !evaluator.isInitialized {
+		return "", errors.New("Function evaluator must be initialized before usage")
+	}
+
 	namespace, fnNameWithoutNamespace, err := extractNamespaceAndFunctionName(functionName, evaluator.functionMapping)
 
 	if err != nil {

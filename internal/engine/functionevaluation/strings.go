@@ -59,16 +59,27 @@ func substr(fnParams map[string]any) (string, error) {
 		return "", errors.New("substr function requires parameter 'str' to be of type string")
 	}
 
-	startIdx, isStartIdxInt := startIdxAsAny.(uint64)
+	startIdxUint64, isStartIdxInt := startIdxAsAny.(uint64)
 
 	if !isStartIdxInt {
 		return "", errors.New("substr function requires parameter 'startIdx' to be an unsigned integer")
 	}
 
-	endIdx, isEndIdxInt := endIdxAsAny.(uint64)
+	endIdxUint64, isEndIdxInt := endIdxAsAny.(uint64)
 
 	if !isEndIdxInt {
 		return "", errors.New("substr function requires parameter 'endIdx' to be an unsigned integer")
+	}
+
+	startIdx := int(startIdxUint64)
+	endIdx := min(int(endIdxUint64), len(strParam))
+
+	if startIdx > (len(strParam) - 1) {
+		return "", errors.New("substr function requires parameter 'startIdx' to be less than the length of 'str'")
+	}
+
+	if startIdx > endIdx {
+		return "", errors.New("substr function requires the parameter 'startIdx' to be less than the 'endIdx' parameter")
 	}
 
 	return strParam[startIdx:endIdx], nil
