@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -24,7 +25,10 @@ func Run(mappingFiles []string, outputFile string) error {
 		allfiles.WriteString("'" + f + "' ")
 	}
 
-	fmt.Println("Generating RDF file using " + allfiles.String())
+	// allfilesStr := strings.TrimSpace(allfiles.String())
+
+	slog.Info("Generating RDF file", "files", mappingFiles)
+	// fmt.Println("Generating RDF file using " + allfiles.String())
 
 	mappings, parseError := parseMappings(mappingFiles)
 
@@ -32,7 +36,8 @@ func Run(mappingFiles []string, outputFile string) error {
 		return parseError
 	}
 
-	fmt.Printf("Successfully parsed %d mapping(s)\n", len(mappings))
+	slog.Info("Successfully parsed mapping(s)\n", "numMappings", len(mappings))
+	// fmt.Printf("Successfully parsed %d mapping(s)\n", len(mappings))
 
 	// TODO do a mapping validation after the mappings are parsed and before actual processing begins
 
