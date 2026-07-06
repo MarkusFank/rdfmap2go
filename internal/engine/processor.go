@@ -23,7 +23,7 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 		return err
 	}
 
-	tripleStore := rdf.TripleStore{}
+	tripleStore := rdf.NewTripleStore()
 	functionEvaluator := functionevaluation.FunctionEvaluator{}
 	functionEvaluator.Init(mapping.Functions)
 
@@ -33,7 +33,7 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 			continue
 		}
 
-		err := processSource(source, &mappings, mapping, &functionEvaluator, &tripleStore)
+		err := processSource(source, &mappings, mapping, &functionEvaluator, tripleStore)
 
 		if err != nil {
 			return err
@@ -44,7 +44,7 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 
 	serializer := serialization.NTripleSerializer{} // TODO let serializer type be set from options
 
-	serializer.Serialize(&tripleStore, outputFile)
+	serializer.Serialize(tripleStore, outputFile)
 
 	return nil
 }
@@ -113,7 +113,10 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 				continue // if the object has no value, do not add the triple
 			}
 
-			fillToTripleStore(subject, predicate, object, tripleStore)
+			err := fillToTripleStore(subject, predicate, object, tripleStore)
+			if err != nil {
+				return err
+			}
 
 		} else {
 			expandedParams := map[string]any{}
@@ -139,19 +142,23 @@ func processDataRowWithMapping(dataRow datareader.DataRow, mapping *mapping.Mapp
 				continue // if the object has no value, do not add the triple
 			}
 
-			fillToTripleStore(subject, predicate, object, tripleStore)
+			err = fillToTripleStore(subject, predicate, object, tripleStore)
+
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func fillToTripleStore(subject, predicate, object string, tripleStore *rdf.TripleStore) {
+func fillToTripleStore(subject, predicate, object string, tripleStore *rdf.TripleStore) error {
 	subjectNode := createNodeForValue(subject)
 	predicateNode := createNodeForValue(predicate)
 	objectNode := createNodeForValue(object)
 
-	tripleStore.AddTriple(subjectNode, predicateNode, objectNode)
+	return tripleStore.AddTriple(subjectNode, predicateNode, objectNode)
 }
 
 func createNodeForValue(value string) rdf.Node {
