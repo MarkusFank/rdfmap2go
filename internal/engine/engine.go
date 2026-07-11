@@ -9,7 +9,7 @@ import (
 	"github.com/MarkusFank/rdfmap2go/internal/mapping"
 )
 
-func Run(mappingFiles []string, outputFile string) error {
+func Run(mappingFiles []string, outputFile, outputType string) error {
 
 	if len(mappingFiles) == 0 {
 		return errors.New("At least one mapping file has to be specified")
@@ -38,7 +38,7 @@ func Run(mappingFiles []string, outputFile string) error {
 
 	mapping := mapping.MergeMappings(mappings)
 
-	processingErr := Process(&mapping, outputFile)
+	processingErr := Process(&mapping, outputFile, outputType)
 
 	if processingErr != nil {
 		return processingErr

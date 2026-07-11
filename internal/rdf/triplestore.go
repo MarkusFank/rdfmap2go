@@ -29,14 +29,28 @@ type Triple struct {
 }
 
 type TripleStore struct {
-	graph   *graph.Graph
+	Graph   *graph.Graph // TODO do not expose Graph; just temporary to use it in serializer
 	Triples []Triple
 }
 
 func NewTripleStore() *TripleStore {
 	ts := TripleStore{}
-	ts.graph = graph.NewGraph()
+	ts.Graph = graph.NewGraph()
 	return &ts
+}
+
+func (store *TripleStore) BindPrefixes(prefixes map[string]string) error {
+	for prefix, ns := range prefixes {
+		uriRef, err := rdf.NewURIRef(ns)
+
+		if err != nil {
+			return fmt.Errorf("Unable to bind prefix %q with namespace %q: %w", prefix, ns, err)
+		}
+
+		store.Graph.Bind(prefix, uriRef)
+	}
+
+	return nil
 }
 
 func (store *TripleStore) AddTriple(subject Node, predicate Node, object Node) error {
@@ -55,7 +69,7 @@ func (store *TripleStore) AddTriple(subject Node, predicate Node, object Node) e
 	}
 
 	o := rdf.NewLiteral(object.Value)
-	store.graph.Add(s, p, o)
+	store.Graph.Add(s, p, o)
 
 	return nil
 }

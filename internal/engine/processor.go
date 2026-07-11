@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	"github.com/MarkusFank/rdfmap2go/internal/rdf/serialization"
 )
 
-func Process(mapping *mapping.Mapping, outputFile string) error {
+func Process(mapping *mapping.Mapping, outputFile, outputType string) error {
 
 	sourcesToMappings, err := mapSourcesToMappings(mapping)
 
@@ -24,6 +25,9 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 	}
 
 	tripleStore := rdf.NewTripleStore()
+
+	tripleStore.BindPrefixes(mapping.Prefixes)
+
 	functionEvaluator := functionevaluation.FunctionEvaluator{}
 	functionEvaluator.Init(mapping.Functions)
 
@@ -42,11 +46,20 @@ func Process(mapping *mapping.Mapping, outputFile string) error {
 
 	fmt.Printf("Created %d triples\n", len(tripleStore.Triples))
 
-	serializer := serialization.NTripleSerializer{} // TODO let serializer type be set from options
+	// serializer := serialization.NTripleSerializer{} // TODO let serializer type be set from options
+	// serializer := serialization.TurtleSerializer{}
 
-	serializer.Serialize(tripleStore, outputFile)
+	var serializer serialization.TripleStoreSerializer
+	switch outputType {
+	case "ttl":
+		serializer = &serialization.TurtleSerializer{}
+	case "nt":
+		serializer = &serialization.NTripleSerializer{}
+	default:
+		return errors.New("Unable to determine serializer type")
+	}
 
-	return nil
+	return serializer.Serialize(tripleStore, outputFile)
 }
 
 func processSource(sourceName string, mappingsForSource *[]string, mainMapping *mapping.Mapping, functionEvaluator *functionevaluation.FunctionEvaluator, tripleStore *rdf.TripleStore) error {
