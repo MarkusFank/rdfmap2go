@@ -5,6 +5,7 @@ import (
 
 	rdf "github.com/tggo/goRDFlib"
 	"github.com/tggo/goRDFlib/graph"
+	"github.com/tggo/goRDFlib/term"
 )
 
 type NodeType int
@@ -68,8 +69,29 @@ func (store *TripleStore) AddTriple(subject Node, predicate Node, object Node) e
 		return fmt.Errorf("Unable to create predicate %w", err)
 	}
 
-	o := rdf.NewLiteral(object.Value)
+	var o term.Term
+	if object.Type == Literal {
+		var opt rdf.LiteralOption
+
+		if len(object.DataType) == 0 {
+			opt = rdf.WithDatatype(rdf.XSDString)
+		} else {
+			opt = rdf.WithDatatype(rdf.NewURIRefUnsafe(rdf.XSDNamespace + object.DataType))
+		}
+
+		o = rdf.NewLiteral(object.Value, opt)
+	} else {
+		o, err = rdf.NewURIRef(object.Value)
+
+		if err != nil {
+			return fmt.Errorf("Unable to create object %w", err)
+		}
+	}
 	store.Graph.Add(s, p, o)
 
 	return nil
+}
+
+func (store *TripleStore) NumTriples() int {
+	return store.Graph.Len()
 }

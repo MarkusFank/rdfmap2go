@@ -44,7 +44,7 @@ func Process(mapping *mapping.Mapping, outputFile, outputType string) error {
 		}
 	}
 
-	fmt.Printf("Created %d triples\n", len(tripleStore.Triples))
+	fmt.Printf("Created %d triples\n", tripleStore.NumTriples())
 
 	// serializer := serialization.NTripleSerializer{} // TODO let serializer type be set from options
 	// serializer := serialization.TurtleSerializer{}
@@ -176,13 +176,17 @@ func fillToTripleStore(subject, predicate, object string, tripleStore *rdf.Tripl
 
 func createNodeForValue(value string) rdf.Node {
 	node := rdf.Node{}
+	valToUse := value
 	if strings.HasPrefix(value, "http://") {
+		node.Type = rdf.URI
+	} else if strings.HasSuffix(value, "~iri") {
+		valToUse, _ = strings.CutSuffix(value, "~iri")
 		node.Type = rdf.URI
 	} else {
 		node.Type = rdf.Literal
 	}
 
-	node.Value = value
+	node.Value = valToUse
 
 	return node
 }
